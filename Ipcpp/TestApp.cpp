@@ -1,11 +1,13 @@
 ﻿// Ipcpp.lib.cpp : Defines the entry point for the application.
 //
 #include "ipcsocket.h"
+#include <thread>
 
 using namespace std;
 
-void HandleConnection(ipcpp::CommunicationSocket socket)
+void HandleConnection(const int communicationFd)
 {
+	ipcpp::CommunicationSocket socket(communicationFd);
 	std::string msg = "Oh Hai!";
 	socket.send(msg);
 }
@@ -16,7 +18,8 @@ int main()
 
 	while (1)
 	{
-		HandleConnection(server.accept());
+		std::thread acceptThread(HandleConnection, server.accept());
+		acceptThread.join();
 	}
 	return 0;
 }

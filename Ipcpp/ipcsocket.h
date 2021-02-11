@@ -14,12 +14,11 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <cerrno>
 #endif
 
 namespace ipcpp
 {
-    //Const out of range of known ports
-    constexpr unsigned int unassignedPort = 70000;
     constexpr int unixSysCallReturnFailed = -1;
     constexpr unsigned int backlog = 10;
 
@@ -40,15 +39,16 @@ namespace ipcpp
     class CommunicationSocket
     {
     public:
-        CommunicationSocket() = delete;
+        CommunicationSocket();
 
         CommunicationSocket(const int socketFd) :
             socketFd(socketFd)
-        {
+        {}
 
-        }
+        CommunicationSocket(const CommunicationSocket&) = delete;
+        CommunicationSocket& operator=(const CommunicationSocket) = delete;
 
-        virtual ~CommunicationSocket()
+        virtual ~CommunicationSocket() noexcept
         {
 #ifndef _WIN32
             close(socketFd);
@@ -56,21 +56,22 @@ namespace ipcpp
 
         }
 
-        int send(std::string& message)
+        virtual int send(std::string& message)
         {
 #ifndef _WIN32
             if (unixSysCallReturnFailed == ::send(socketFd, message.c_str(), message.size(), 0))
             {
-                throw std::runtime_error("Failed to send");
+                close(socketFd);
+                throw std::runtime_error("Failed to send" + errno);
             }
 #endif // !_WIN32
         }
 
 
-        int receive() {}
+        virtual int receive() {}
 
-    private:
-        const int socketFd;
+    protected:
+        int socketFd;
     };
 
     class ServerSocket
@@ -142,8 +143,16 @@ namespace ipcpp
         ServerSocket(const ServerSocket&) = delete;
         ServerSocket& operator=(ServerSocket) = delete;
 
+        ~ServerSocket()
+        {
+#ifndef _WIN32
+            close(socketFd);
+#endif // !_WIN32
+
+        }
+
         //Return communication socket
-        CommunicationSocket accept()
+        int accept()
         {
 #ifndef _WIN32
             struct sockaddr_storage connectedAddress;
@@ -151,10 +160,12 @@ namespace ipcpp
             int communicationFd = ::accept(socketFd, reinterpret_cast<sockaddr*>(&connectedAddress), &size);
             if (unixSysCallReturnFailed == communicationFd)
             {
-                throw std::runtime_error("Failed to accept");
+                close(socketFd);
+                close(communicationFd);
+                throw std::runtime_error("Failed to accept" + errno);
             }
 
-            return CommunicationSocket(communicationFd);
+            return communicationFd;
 
 
 #else // !_WIN32
@@ -168,12 +179,41 @@ namespace ipcpp
 
     };
 
-    class ClientSocket
+    class ClientSocket: public CommunicationSocket
     {
 
     public:
-        ClientSocket() = default;
-        ClientSocket(const std::string& ip, const int port) {}
+        ClientSocket() = delete;
+
+        ClientSocket(const std::string& ip, std::string& port)
+        {
+#ifndef _WIN32
+            struct addrinfo hints, *servinfo;
+
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_socktype = SOCK_STREAM;
+
+            if (0 != ::getaddrinfo(ip.c_str(), port.c_str(), &hints, &servinfo))
+            {
+                throw std::runtime_error("Failed to get address info");
+            }
+
+            socketFd = ::socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+            if (unixSysCallReturnFailed == socketFd)
+            {
+                throw std::runtime_error("Failed to create socket");
+            }
+            
+            if (unixSysCallReturnFailed == ::connect(socketFd, servinfo->ai_addr, servinfo->ai_addrlen))
+            {
+                throw std::runtime_error("Failed to connect");
+            }
+
+#endif // !_WIN32
+
+        }
+
         ClientSocket(ClientSocket&&) noexcept {}
         ClientSocket&& operator=(ClientSocket&&) noexcept {}
 
@@ -181,10 +221,6 @@ namespace ipcpp
         ClientSocket(const ClientSocket&) = delete;
         ClientSocket& operator=(ClientSocket&) = delete;
         ~ClientSocket() {}
-
-        int connect() {}
-        int send() {}
-        int receive() {}
 
     private:
 
