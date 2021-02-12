@@ -39,7 +39,7 @@ namespace ipcpp
     class CommunicationSocket
     {
     public:
-        CommunicationSocket();
+        CommunicationSocket() {}
 
         CommunicationSocket(const int socketFd) :
             socketFd(socketFd)
@@ -68,7 +68,23 @@ namespace ipcpp
         }
 
 
-        virtual int receive() {}
+        virtual std::string receive()
+        {
+#ifndef _WIN32
+            constexpr int maxDataRecived = 100;
+            char buffer[maxDataRecived];
+
+            int bytes = ::recv(socketFd, buffer, maxDataRecived - 1, 0);
+            if (unixSysCallReturnFailed == bytes)
+            {
+                throw std::runtime_error("Failed to receive");
+            }
+
+            std::string response(buffer);
+            return response;
+
+#endif // !_WIN32
+        }
 
     protected:
         int socketFd;
