@@ -84,7 +84,7 @@ namespace ipcpp
             int bytes = ::recv(socketFd, buffer, maxDataRecived - 1, 0);
             if (unixSysCallReturnFailed == bytes)
             {
-                throw std::runtime_error("Failed to receive");
+                throw std::runtime_error("Failed to receive data" + errno);
             }
 
             std::string response(buffer);
