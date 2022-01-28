@@ -6,8 +6,9 @@
 void HandleConnection(const int communicationFd)
 {
     ipcpp::CommunicationSocket socket(communicationFd);
-    std::string msg = "Oh Hai!";
-    socket.send(msg);
+    auto rc = socket.receive();
+    std::cout<<rc<<std::endl;
+
 }
 
 int main()
@@ -15,7 +16,9 @@ int main()
     ipcpp::ServerSocket server("1921");
     while (1)
     {
-        HandleConnection(server.accept()); 
+        auto fd = server.accept();
+        std::thread connectionHandler(HandleConnection, fd);
+        connectionHandler.join();
     }
     return 0;
 }

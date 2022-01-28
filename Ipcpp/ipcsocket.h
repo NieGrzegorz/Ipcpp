@@ -125,7 +125,7 @@ namespace ipcpp
                 throw std::runtime_error("Failed to create socket");
             }
 
-            int yes = 1;
+            const int yes = 1;
             if (unixSysCallReturnFailed == ::setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)))
             {
                 throw std::runtime_error("Failed to setsockopt");
@@ -181,6 +181,7 @@ namespace ipcpp
             {
                 close(socketFd);
                 close(communicationFd);
+                std::cout<<"dupsko\n";
                 throw std::runtime_error("Failed to accept" + errno);
             }
 
@@ -233,7 +234,7 @@ namespace ipcpp
 
         ClientSocket(const ClientSocket&) = delete;
         ClientSocket& operator=(ClientSocket&) = delete;
-        ~ClientSocket() {}
+        ~ClientSocket() noexcept = default;
 
     private:
 
