@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿#ifndef IPCSOCKET_HPP
+#define IPCSOCKET_HPP
 
 #include <iostream>
 
@@ -36,17 +37,23 @@ namespace ipcpp
 #endif // !_WIN32
     }
 
+    enum class eProtocool
+    {
+      TCP,
+      UDP
+    };
+
     class CommunicationSocket
     {
-    public:
-        CommunicationSocket() {}
+      public:
+          CommunicationSocket() = default;
 
-        CommunicationSocket(const int socketFd) :
-            socketFd(socketFd)
-        {}
+          explicit CommunicationSocket(const int socketFd) :
+              socketFd(socketFd)
+          {}
 
-        CommunicationSocket(const CommunicationSocket&) = delete;
-        CommunicationSocket& operator=(const CommunicationSocket) = delete;
+          CommunicationSocket(const CommunicationSocket&) = delete;
+          CommunicationSocket& operator=(const CommunicationSocket) = delete;
 
         virtual ~CommunicationSocket() noexcept
         {
@@ -90,17 +97,13 @@ namespace ipcpp
         int socketFd;
     };
 
+    //! \brief Server socket class
     class ServerSocket
     {
     public:
         ServerSocket() = delete;
 
-        /// <summary>
-        /// Constructs the ServerSocket and binds it into a port
-        /// </summary>
-        /// <param name="port">Port to which ServerSocket is bound</param>
-        /// <returns></returns>
-        ServerSocket(std::string&& port) :
+        explicit ServerSocket(std::string&& port):
             port(port),
             socketFd(0)
         {
@@ -138,7 +141,6 @@ namespace ipcpp
             {
                 throw std::runtime_error("Failed to listen");
             }
-
 #else // !_WIN32
 #endif
         }
@@ -167,7 +169,8 @@ namespace ipcpp
 
         }
 
-        //Return communication socket
+        //! \brief accept the connection
+        //! \return file descriptor for communiation socket
         int accept()
         {
 #ifndef _WIN32
@@ -182,17 +185,12 @@ namespace ipcpp
             }
 
             return communicationFd;
-
-
 #else // !_WIN32
 #endif
-
         }
     private:
-
         std::string port;
         int socketFd;
-
     };
 
     class ClientSocket: public CommunicationSocket
@@ -220,7 +218,7 @@ namespace ipcpp
             {
                 throw std::runtime_error("Failed to create socket");
             }
-            
+
             if (unixSysCallReturnFailed == ::connect(socketFd, servinfo->ai_addr, servinfo->ai_addrlen))
             {
                 throw std::runtime_error("Failed to connect");
@@ -233,7 +231,6 @@ namespace ipcpp
         ClientSocket(ClientSocket&&) noexcept {}
         ClientSocket&& operator=(ClientSocket&&) noexcept {}
 
-
         ClientSocket(const ClientSocket&) = delete;
         ClientSocket& operator=(ClientSocket&) = delete;
         ~ClientSocket() {}
@@ -243,5 +240,6 @@ namespace ipcpp
 
 
     };
+} // namespace ipcpp
 
-}
+#endif

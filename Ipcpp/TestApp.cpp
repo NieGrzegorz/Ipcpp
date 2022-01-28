@@ -3,23 +3,19 @@
 #include "ipcsocket.h"
 #include <thread>
 
-using namespace std;
-
 void HandleConnection(const int communicationFd)
 {
-	ipcpp::CommunicationSocket socket(communicationFd);
-	std::string msg = "Oh Hai!";
-	socket.send(msg);
+    ipcpp::CommunicationSocket socket(communicationFd);
+    std::string msg = "Oh Hai!";
+    socket.send(msg);
 }
 
 int main()
 {
-	ipcpp::ServerSocket server("1921");
-
-	while (1)
-	{
-		std::thread acceptThread(HandleConnection, server.accept());
-		acceptThread.join();
-	}
-	return 0;
+    ipcpp::ServerSocket server("1921");
+    while (1)
+    {
+        HandleConnection(server.accept()); 
+    }
+    return 0;
 }
