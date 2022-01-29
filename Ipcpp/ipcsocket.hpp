@@ -49,6 +49,7 @@ enum class eProtocool
 class CommunicationSocket
 {
 public:
+    CommunicationSocket() = default;
     explicit CommunicationSocket(const int socketFd):
     socketFd(socketFd)
     {}
@@ -71,6 +72,7 @@ public:
             close(socketFd);
             throw std::runtime_error("Failed to send" + errno);
         }
+        return 0;
     #endif // !_WIN32
     }
 
@@ -101,75 +103,32 @@ class ServerSocket
 public:
     ServerSocket() = delete;
 
-    explicit ServerSocket(std::string&& port):
-    port(port),
-    socketFd(0)
+    explicit ServerSocket(std::string&& _port):
+    _port(_port),
+    _socket_handle(0)
     {
-    #ifndef _WIN32
-        struct addrinfo hints, * servinfo;
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_flags = AI_PASSIVE;
-
-        if (0 != ::getaddrinfo(nullptr, port.c_str(), &hints, &servinfo))
-        {
-            throw std::runtime_error("Failed to get address info");
-        }
-
-        socketFd = ::socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
-        if (unixSysCallReturnFailed == socketFd)
-        {
-            throw std::runtime_error("Failed to create socket");
-        }
-
-        const int yes = 1;
-        if (unixSysCallReturnFailed == ::setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)))
-        {
-            throw std::runtime_error("Failed to setsockopt");
-        }
-
-        if (unixSysCallReturnFailed == ::bind(socketFd, servinfo->ai_addr, servinfo->ai_addrlen))
-        {
-            throw std::runtime_error("Failed to bind the socket");
-        }
-        freeaddrinfo(servinfo);
-
-        if (unixSysCallReturnFailed == ::listen(socketFd, ipcpp::backlog))
-        {
-            throw std::runtime_error("Failed to listen");
-        }
-    #else // !_WIN32
-        SOCKET listenSocket = INVALID_SOCKET;
-
+    #ifdef _WIN32
         int result = WSAStartup(MAKEWORD(2,2), &wsaData);
         if(result != 0)
         {
             throw std::runtime_error("Failed to initialize Winsock\n");
         }
-
-        struct addrinfo hints, *servinfo;
-        ZeroMemory(&hints, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_flags = AI_PASSIVE;
-
-        result = getaddrinfo(nullptr, port.c_str(), &hints, &servinfo);
-
-        listenSocket = ::socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
-        result = ::bind(listenSocket, servinfo->ai_addr, static_cast<int>(servinfo->ai_addrlen));
-        result = ::listen(listenSocket, SOMAXCONN);
     #endif
+
+        auto servinfo = acquireSocket(_socket_handle);
+        auto res = bindSocket(_socket_handle, servinfo);
+        freeaddrinfo(servinfo);
+        startListening(_socket_handle);
     }
 
     //! \brief Move server socket
     ServerSocket(ServerSocket&& move) noexcept :
-    socketFd(move.socketFd),
-    port(move.port)
+    _socket_handle(move._socket_handle),
+    _port(move._port)
     {
     }
 
-    ServerSocket&& operator=(ServerSocket&&) noexcept {}
+    //ServerSocket&& operator=(ServerSocket&&) noexcept {}
 
     ServerSocket(const ServerSocket&) = delete;
     ServerSocket& operator=(ServerSocket) = delete;
@@ -177,7 +136,7 @@ public:
     ~ServerSocket()
     {
     #ifndef _WIN32
-        close(socketFd);
+        close(_socket_handle);
     #endif // !_WIN32
     }
 
@@ -188,12 +147,11 @@ public:
     #ifndef _WIN32
         struct sockaddr_storage connectedAddress;
         socklen_t size;
-        int communicationFd = ::accept(socketFd, reinterpret_cast<sockaddr*>(&connectedAddress), &size);
+        int communicationFd = ::accept(_socket_handle, reinterpret_cast<sockaddr*>(&connectedAddress), &size);
         if (unixSysCallReturnFailed == communicationFd)
         {
-            close(socketFd);
+            close(_socket_handle);
             close(communicationFd);
-            std::cout<<"dupsko\n";
             throw std::runtime_error("Failed to accept" + errno);
         }
 
@@ -201,32 +159,67 @@ public:
     #else // !_WIN32
     #endif
     }
-    
+
 private:
     template <typename T>
-    int acquireSocket()
+    addrinfo* acquireSocket(T socketHandle)
     {
+        struct addrinfo hints, *servinfo;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_PASSIVE;
 
+        if (0 != ::getaddrinfo(nullptr, _port.c_str(), &hints, &servinfo))
+        {
+            throw std::runtime_error("Failed to get address info");
+        }
+
+        _socket_handle = ::socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+        if (unixSysCallReturnFailed == _socket_handle)
+        {
+            throw std::runtime_error("Failed to create socket");
+        }
+
+    #ifndef _WIN32
+        const int yes = 1;
+        if (unixSysCallReturnFailed == ::setsockopt(_socket_handle, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)))
+        {
+            throw std::runtime_error("Failed to setsockopt");
+        }
+    #endif
+        return servinfo;
     }
 
     template <typename T>
-    int bindSocket()
+    int bindSocket(T socketHandle, addrinfo* servinfo)
     {
-
+        if (unixSysCallReturnFailed == ::bind(_socket_handle, servinfo->ai_addr, servinfo->ai_addrlen))
+        {
+            std::cout<<"Failed to bind\n";
+            throw std::runtime_error("Failed to bind the socket");
+        }
     }
 
     template <typename T>
-    int startListening()
+    void startListening(T socketHandle)
     {
-
+        if (unixSysCallReturnFailed == ::listen(_socket_handle, backlog))
+        {
+            std::cout<<"Failed to listen\n";
+            throw std::runtime_error("Failed to listen");
+        }
     }
 
 
-    std::string port;
-    int socketFd;
+    std::string _port;
+    //int socketFd;
 
     #ifdef _WIN32
-    WSADATA wsaData;
+        WSADATA wsaData;
+        SOCKET _socket_handle;
+    #else
+        int _socket_handle;
     #endif
 };
 
@@ -234,7 +227,7 @@ class ClientSocket: public CommunicationSocket
 {
 
 public:
-    ClientSocket(const std::string& ip, std::string& port)
+    ClientSocket(const std::string& ip, std::string& _port)
     {
     #ifndef _WIN32
         struct addrinfo hints, *servinfo;
@@ -242,7 +235,7 @@ public:
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
 
-        if (0 != ::getaddrinfo(ip.c_str(), port.c_str(), &hints, &servinfo))
+        if (0 != ::getaddrinfo(ip.c_str(), _port.c_str(), &hints, &servinfo))
         {
             throw std::runtime_error("Failed to get address info");
         }
@@ -258,9 +251,9 @@ public:
         }
     #endif // !_WIN32
     }
-
-    ClientSocket(ClientSocket&&) noexcept {}
-    ClientSocket&& operator=(ClientSocket&&) noexcept {}
+    //
+    // ClientSocket(ClientSocket&&) noexcept {}
+    // ClientSocket&& operator=(ClientSocket&&) noexcept {}
 
     ClientSocket(const ClientSocket&) = delete;
     ClientSocket& operator=(ClientSocket&) = delete;

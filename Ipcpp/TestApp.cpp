@@ -1,6 +1,6 @@
 ﻿// Ipcpp.lib.cpp : Defines the entry point for the application.
 //
-#include "ipcsocket.h"
+#include "ipcsocket.hpp"
 #include <thread>
 
 void HandleConnection(const int communicationFd)
@@ -17,8 +17,7 @@ int main()
     while (1)
     {
         auto fd = server.accept();
-        std::thread connectionHandler(HandleConnection, fd);
-        connectionHandler.join();
+        HandleConnection(fd);
     }
     return 0;
 }
