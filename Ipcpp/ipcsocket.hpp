@@ -6,6 +6,8 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
+#pragma comment (lib, "Ws2_32.lib")
 #endif
 
 #ifdef linux
@@ -39,6 +41,15 @@ auto getInAddrType(struct sockaddr* sa)
 #endif // !_WIN32
 }
 
+auto checkPlatformResult(int errorCode)
+{
+#ifndef _WIN32
+    return unixSysCallReturnFailed == errorCode;
+#else
+    return errorCode != 0;
+#endif
+}
+
 enum class eProtocool
 {
   TCP,
@@ -51,7 +62,7 @@ class CommunicationSocket
 public:
     CommunicationSocket() = default;
     explicit CommunicationSocket(const int socketFd):
-    socketFd(socketFd)
+    _socket_handle(socketFd)
     {}
 
     CommunicationSocket(const CommunicationSocket&) = delete;
@@ -67,22 +78,22 @@ public:
     virtual int send(std::string& message)
     {
     #ifndef _WIN32
-        if (unixSysCallReturnFailed == ::send(socketFd, message.c_str(), message.size(), 0))
+        if (unixSysCallReturnFailed == ::send(_socket_handle, message.c_str(), message.size(), 0))
         {
-            close(socketFd);
+            close(_socket_handle);
             throw std::runtime_error("Failed to send" + errno);
         }
         return 0;
     #endif // !_WIN32
+        return 0;
     }
 
     virtual std::string receive()
     {
-    #ifndef _WIN32
         constexpr int maxDataRecived = 100;
         char buffer[maxDataRecived];
 
-        int bytes = ::recv(socketFd, buffer, maxDataRecived - 1, 0);
+        int bytes = ::recv(_socket_handle, buffer, maxDataRecived - 1, 0);
         if (unixSysCallReturnFailed == bytes)
         {
             throw std::runtime_error("Failed to receive data" + errno);
@@ -90,11 +101,14 @@ public:
 
         std::string response(buffer);
         return response;
-    #endif // !_WIN32
     }
 
 protected:
-    int socketFd;
+    #ifndef _WIN32
+    int _socket_handle;
+    #else
+    SOCKET _socket_handle;
+    #endif
 };
 
 //! \brief Server socket class
@@ -108,15 +122,15 @@ public:
     _socket_handle(0)
     {
     #ifdef _WIN32
-        int result = WSAStartup(MAKEWORD(2,2), &wsaData);
-        if(result != 0)
+        auto result = WSAStartup(MAKEWORD(2,2), &wsaData);
+        if(checkPlatformResult(result))
         {
             throw std::runtime_error("Failed to initialize Winsock\n");
         }
     #endif
 
         auto servinfo = acquireSocket(_socket_handle);
-        auto res = bindSocket(_socket_handle, servinfo);
+        bindSocket(_socket_handle, servinfo);
         freeaddrinfo(servinfo);
         startListening(_socket_handle);
     }
@@ -142,22 +156,22 @@ public:
 
     //! \brief accept the connection
     //! \return file descriptor for communiation socket
-    int accept()
+    auto accept()
     {
-    #ifndef _WIN32
+    //#ifndef _WIN32
         struct sockaddr_storage connectedAddress;
         socklen_t size;
-        int communicationFd = ::accept(_socket_handle, reinterpret_cast<sockaddr*>(&connectedAddress), &size);
-        if (unixSysCallReturnFailed == communicationFd)
+        auto communiationHandle = ::accept(_socket_handle, NULL, NULL);//reinterpret_cast<sockaddr*>(&connectedAddress), &size);
+        if (checkPlatformResult(communiationHandle))
         {
-            close(_socket_handle);
-            close(communicationFd);
+            //close(_socket_handle);
+            //close(communiationHandle);
             throw std::runtime_error("Failed to accept" + errno);
         }
 
-        return communicationFd;
-    #else // !_WIN32
-    #endif
+        return communiationHandle;
+    //#else // !_WIN32
+    //#endif
     }
 
 private:
@@ -192,7 +206,7 @@ private:
     }
 
     template <typename T>
-    int bindSocket(T socketHandle, addrinfo* servinfo)
+    void bindSocket(T socketHandle, addrinfo* servinfo)
     {
         if (unixSysCallReturnFailed == ::bind(_socket_handle, servinfo->ai_addr, servinfo->ai_addrlen))
         {

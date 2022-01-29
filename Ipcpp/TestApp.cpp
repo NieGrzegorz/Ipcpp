@@ -8,16 +8,14 @@ void HandleConnection(const int communicationFd)
     ipcpp::CommunicationSocket socket(communicationFd);
     auto rc = socket.receive();
     std::cout<<rc<<std::endl;
-
 }
 
 int main()
 {
     ipcpp::ServerSocket server("1921");
-    while (1)
-    {
-        auto fd = server.accept();
-        HandleConnection(fd);
-    }
+
+    auto fd = server.accept();
+    HandleConnection(fd);
+
     return 0;
 }
