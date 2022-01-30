@@ -71,7 +71,7 @@ public:
     virtual ~CommunicationSocket() noexcept
     {
     #ifndef _WIN32
-        close(socketFd);
+        close(_socket_handle);
     #endif // !_WIN32
     }
 
@@ -129,10 +129,10 @@ public:
         }
     #endif
 
-        auto servinfo = acquireSocket(_socket_handle);
-        bindSocket(_socket_handle, servinfo);
+        auto servinfo = acquireSocket();
+        bindSocket(servinfo);
         freeaddrinfo(servinfo);
-        startListening(_socket_handle);
+        startListening();
     }
 
     //! \brief Move server socket
@@ -175,8 +175,7 @@ public:
     }
 
 private:
-    template <typename T>
-    addrinfo* acquireSocket(T socketHandle)
+    addrinfo* acquireSocket()
     {
         struct addrinfo hints, *servinfo;
         memset(&hints, 0, sizeof(hints));
@@ -205,8 +204,7 @@ private:
         return servinfo;
     }
 
-    template <typename T>
-    void bindSocket(T socketHandle, addrinfo* servinfo)
+    void bindSocket(addrinfo* servinfo)
     {
         if (unixSysCallReturnFailed == ::bind(_socket_handle, servinfo->ai_addr, servinfo->ai_addrlen))
         {
@@ -215,8 +213,7 @@ private:
         }
     }
 
-    template <typename T>
-    void startListening(T socketHandle)
+    void startListening()
     {
         if (unixSysCallReturnFailed == ::listen(_socket_handle, backlog))
         {
@@ -253,13 +250,13 @@ public:
         {
             throw std::runtime_error("Failed to get address info");
         }
-        socketFd = ::socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
-        if (unixSysCallReturnFailed == socketFd)
+        _socket_handle = ::socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+        if (unixSysCallReturnFailed == _socket_handle)
         {
             throw std::runtime_error("Failed to create socket");
         }
 
-        if (unixSysCallReturnFailed == ::connect(socketFd, servinfo->ai_addr, servinfo->ai_addrlen))
+        if (unixSysCallReturnFailed == ::connect(_socket_handle, servinfo->ai_addr, servinfo->ai_addrlen))
         {
             throw std::runtime_error("Failed to connect");
         }
