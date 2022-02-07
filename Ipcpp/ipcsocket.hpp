@@ -90,11 +90,11 @@ public:
 
     virtual std::string receive()
     {
-        constexpr int maxDataRecived = 100;
+        constexpr int maxDataRecived = 1000;
         char buffer[maxDataRecived];
 
         int bytes = ::recv(_socket_handle, buffer, maxDataRecived - 1, 0);
-        if (unixSysCallReturnFailed == bytes)
+        if (0 == bytes)
         {
             throw std::runtime_error("Failed to receive data" + errno);
         }
@@ -142,8 +142,6 @@ public:
     {
     }
 
-    //ServerSocket&& operator=(ServerSocket&&) noexcept {}
-
     ServerSocket(const ServerSocket&) = delete;
     ServerSocket& operator=(ServerSocket) = delete;
 
@@ -161,11 +159,11 @@ public:
     //#ifndef _WIN32
         struct sockaddr_storage connectedAddress;
         socklen_t size;
-        auto communiationHandle = ::accept(_socket_handle, NULL, NULL);//reinterpret_cast<sockaddr*>(&connectedAddress), &size);
+        auto communiationHandle = ::accept(_socket_handle, NULL, NULL);
         if (checkPlatformResult(communiationHandle))
         {
-            //close(_socket_handle);
-            //close(communiationHandle);
+            close(_socket_handle);
+            close(communiationHandle);
             throw std::runtime_error("Failed to accept" + errno);
         }
 
@@ -222,9 +220,8 @@ private:
         }
     }
 
-
+private:
     std::string _port;
-    //int socketFd;
 
     #ifdef _WIN32
         WSADATA wsaData;

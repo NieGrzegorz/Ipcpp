@@ -14,8 +14,12 @@ int main()
 {
     ipcpp::ServerSocket server("1921");
 
-    auto fd = server.accept();
-    HandleConnection(fd);
+    while(1)
+    {
+
+        auto fd = server.accept();
+        HandleConnection(fd);
+    }
 
     return 0;
 }
